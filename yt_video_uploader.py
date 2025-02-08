@@ -49,7 +49,8 @@ def get_authenticated_service():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-            creds = flow.run_local_server(port=8080)
+            creds = Credentials.from_authorized_user_file("credentials.json", SCOPES)
+
 
 
 
