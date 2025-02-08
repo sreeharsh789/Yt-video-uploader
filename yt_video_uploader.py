@@ -1,62 +1,42 @@
 import os
 import logging
-import pickle
 import base64
-import re  # ✅ Import regex for filename cleaning
+import json
+import re
 import subprocess
 import asyncio
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from telethon.sync import TelegramClient  # ✅ Sync version for session generation
+from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 from telethon import events
 
 # ✅ Load API keys from environment variables
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
-SESSION_STRING = os.getenv("SESSION_STRING")  # ✅ Get session string from env
+SESSION_STRING = os.getenv("SESSION_STRING")
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 
-# ✅ Load Google credentials from environment variable
-GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
-if GOOGLE_CREDENTIALS:
-    credentials_json = base64.b64decode(GOOGLE_CREDENTIALS).decode("utf-8")
-    with open("credentials.json", "w") as f:
-        f.write(credentials_json)  # Save credentials.json for use
-    CLIENT_SECRETS_FILE = "credentials.json"
-else:
-    raise Exception("Missing GOOGLE_CREDENTIALS environment variable")
+# ✅ Load Google Service Account credentials from environment variable
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
 
-TOKEN_FILE = "token.json"  # Stores authentication token
+if GOOGLE_CREDENTIALS:
+    credentials_json = json.loads(base64.b64decode(GOOGLE_CREDENTIALS).decode("utf-8"))
+    with open("service_account.json", "w") as f:
+        json.dump(credentials_json, f)  # Save credentials to file
+else:
+    raise Exception("❌ Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable")
+
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
-# Logging
+# ✅ Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ✅ Authenticate and get YouTube API service
 def get_authenticated_service():
-    creds = None
-    if os.path.exists(TOKEN_FILE):  # Reuse existing credentials
-        with open(TOKEN_FILE, "rb") as token:
-            creds = pickle.load(token)
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-            creds = Credentials.from_authorized_user_file("credentials.json", SCOPES)
-
-
-
-
-        with open(TOKEN_FILE, "wb") as token:
-            pickle.dump(creds, token)
-
+    creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
     return build("youtube", "v3", credentials=creds)
 
 def upload_to_youtube(file_path, title, description, tags):
@@ -89,16 +69,15 @@ def upload_to_youtube(file_path, title, description, tags):
 
 def sanitize_filename(title):
     """Remove invalid characters from the title to make a valid filename."""
-    title = re.sub(r'[<>:"/\\|?*\n]+', '', title)  # Remove special characters
-    return title.strip()[:100] or "Untitled Video"  # Limit to 100 chars
+    title = re.sub(r'[<>:"/\\|?*\n]+', '', title)
+    return title.strip()[:100] or "Untitled Video"
 
 async def handle_new_message(event):
     if event.video:
         logger.info("📥 New video detected. Downloading...")
 
-        # ✅ Use Telegram caption as title if available
         title = event.message.text if event.message.text else "Untitled Video"
-        title = sanitize_filename(title)  # ✅ Clean the title
+        title = sanitize_filename(title)
 
         file_path = f"{title}.mp4"
         await event.download_media(file=file_path)
@@ -109,7 +88,7 @@ async def handle_new_message(event):
 
         upload_to_youtube(file_path, title, description, tags)
 
-        os.remove(file_path)  # Clean up after upload
+        os.remove(file_path)  # Cleanup after upload
         logger.info("🗑️ Deleted local file after upload.")
 
 def convert_video_to_mp4(input_file):
