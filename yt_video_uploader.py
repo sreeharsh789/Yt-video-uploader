@@ -49,7 +49,8 @@ def get_authenticated_service():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-            creds = flow.run_console()
+            creds = flow.run_local_server(port=8080)
+
 
 
         with open(TOKEN_FILE, "wb") as token:
