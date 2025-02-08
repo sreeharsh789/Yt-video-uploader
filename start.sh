@@ -2,9 +2,6 @@
 
 echo "Starting Telegram bot..."
 
-# Install dependencies
-pip install -r requirements.txt
-
 # Start the bot in the background
 python yt_video_uploader.py &
 
